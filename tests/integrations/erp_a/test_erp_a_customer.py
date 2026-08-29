@@ -1,4 +1,4 @@
-from b2b_erp_data_integrator.integrations.erp_a.customer import map_customer
+from b2b_erp_data_integrator.integrations.erp_a.customer import map_erp_a_customer
 
 
 def test_map_erp_a_customer():
@@ -10,7 +10,7 @@ def test_map_erp_a_customer():
         "email": "info@acme.es",
     }
 
-    result = map_customer(data)
+    result = map_erp_a_customer(data)
 
     assert result.source_system == "ERP_A"
     assert result.external_id == "C001"

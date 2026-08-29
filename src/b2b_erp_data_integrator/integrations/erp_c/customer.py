@@ -1,23 +1,21 @@
-from b2b_erp_data_integrator.models.customer import CanonicalCustomer
+from b2b_erp_data_integrator.mapping.customer import map_customer
 from b2b_erp_data_integrator.models.external_source_customer import (
     ExternalSourceCustomer,
 )
-from b2b_erp_data_integrator.normalization.country import normalize_country
-from b2b_erp_data_integrator.normalization.tax_id import normalize_tax_id
 
 
-def map_customer(data: dict) -> ExternalSourceCustomer:
-    country = normalize_country(data["country_code"])
+ERP_C_CUSTOMER_MAPPING = {
+    "external_id": "customer_code",
+    "name": "customer_name",
+    "tax_id": "fiscal_id",
+    "country": "country_code",
+    "email": "email_address",
+}
 
-    customer = CanonicalCustomer(
-        name=data["customer_name"],
-        tax_id=normalize_tax_id(data["fiscal_id"], country=country),
-        country=country,
-        email=data.get("email_address"),
-    )
 
-    return ExternalSourceCustomer(
+def map_erp_c_customer(data: dict) -> ExternalSourceCustomer:
+    return map_customer(
+        data=data,
         source_system="ERP_C",
-        external_id=data["customer_code"],
-        customer=customer,
+        field_mapping=ERP_C_CUSTOMER_MAPPING,
     )
