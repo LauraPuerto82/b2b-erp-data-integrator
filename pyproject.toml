@@ -1,0 +1,21 @@
+[project]
+name = "b2b-erp-data-integrator"
+version = "0.1.0"
+description = "Extensible B2B data integration platform for normalizing heterogeneous ERP data into canonical models."
+readme = "README.md"
+authors = [
+    { name = "Laura", email = "laura.puerto.martin@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.13.5",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
