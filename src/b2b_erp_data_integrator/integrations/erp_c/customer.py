@@ -3,6 +3,7 @@ from b2b_erp_data_integrator.models.external_source_customer import (
     ExternalSourceCustomer,
 )
 from b2b_erp_data_integrator.normalization.country import normalize_country
+from b2b_erp_data_integrator.normalization.tax_id import normalize_tax_id
 
 
 def map_customer(data: dict) -> ExternalSourceCustomer:
@@ -10,7 +11,7 @@ def map_customer(data: dict) -> ExternalSourceCustomer:
 
     customer = CanonicalCustomer(
         name=data["customer_name"],
-        tax_id=data["fiscal_id"],
+        tax_id=normalize_tax_id(data["fiscal_id"], country=country),
         country=country,
         email=data.get("email_address"),
     )

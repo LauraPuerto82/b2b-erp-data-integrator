@@ -15,6 +15,6 @@ def test_map_erp_c_customer():
     assert result.source_system == "ERP_C"
     assert result.external_id == "7842"
     assert result.customer.name == "ACME S.L."
-    assert result.customer.tax_id == "B-12345678"
+    assert result.customer.tax_id == "B12345678"
     assert result.customer.country == "ES"
     assert result.customer.email == "info@acme.es"
