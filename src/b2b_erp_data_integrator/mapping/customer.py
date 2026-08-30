@@ -4,6 +4,7 @@ from b2b_erp_data_integrator.models.external_source_customer import (
 )
 from b2b_erp_data_integrator.normalization.country import normalize_country
 from b2b_erp_data_integrator.normalization.tax_id import normalize_tax_id
+from b2b_erp_data_integrator.validation.tax_id import validate_tax_id
 
 
 def get_mapped_value(
@@ -21,12 +22,17 @@ def map_canonical_customer(
 ) -> CanonicalCustomer:
     country = normalize_country(get_mapped_value(data, field_mapping, "country"))
 
+    tax_id = normalize_tax_id(
+        get_mapped_value(data, field_mapping, "tax_id"),
+        country=country,
+    )
+
+    if not validate_tax_id(tax_id, country):
+        raise ValueError(f"Invalid tax ID for country {country}")
+
     return CanonicalCustomer(
         name=get_mapped_value(data, field_mapping, "name"),
-        tax_id=normalize_tax_id(
-            get_mapped_value(data, field_mapping, "tax_id"),
-            country=country,
-        ),
+        tax_id=tax_id,
         country=country,
         email=data.get(field_mapping["email"]),
     )

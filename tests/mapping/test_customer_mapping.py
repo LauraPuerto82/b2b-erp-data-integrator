@@ -1,3 +1,5 @@
+import pytest
+
 from b2b_erp_data_integrator.mapping.customer import (
     get_mapped_value,
     map_canonical_customer,
@@ -94,3 +96,22 @@ def test_map_customer():
     assert result.customer.tax_id == "B12345678"
     assert result.customer.country == "ES"
     assert result.customer.email == "info@acme.es"
+
+
+def test_map_canonical_customer_rejects_invalid_tax_id():
+    data = {
+        "legal_name": "ACME S.L.",
+        "vat_number": "ESB1234",
+        "country": "Spain",
+        "contact_email": "info@acme.es",
+    }
+
+    field_mapping = {
+        "name": "legal_name",
+        "tax_id": "vat_number",
+        "country": "country",
+        "email": "contact_email",
+    }
+
+    with pytest.raises(ValueError):
+        map_canonical_customer(data, field_mapping)
