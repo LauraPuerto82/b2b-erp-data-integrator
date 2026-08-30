@@ -14,7 +14,7 @@ Some decisions are therefore intentionally scoped to the current stage of the pr
 
 ## ADR-001 --- Keep initial ERP field mappings in provider-specific code
 
-**Status:** Accepted
+**Status:** Superseded by ADR-004
 **Stage:** Initial ERP integration
 
 ### Context
@@ -189,6 +189,95 @@ Country normalization is explicit, deterministic, and independently testable.
 Multiple ERP integrations can reuse the same canonical normalization behavior.
 
 If broader country coverage becomes necessary, the explicit dictionary should be reconsidered in favor of a maintained ISO dataset or library rather than manually expanding it indefinitely.
+
+------------------------------------------------------------------------
+
+## ADR-004 --- Introduce declarative structural mappings after recurring provider patterns emerged
+
+**Status:** Accepted
+**Stage:** ERP mapping generalization
+
+### Context
+
+The first ERP integrations intentionally implemented customer field mappings in provider-specific code, as described in ADR-001.
+
+After implementing three ERP formats, a stable structural pattern emerged. Each integration performed the same sequence:
+
+```text
+read provider-specific fields
+        ↓
+normalize shared values
+        ↓
+construct CanonicalCustomer
+        ↓
+attach external source identity
+```
+
+The integrations differed primarily in the names used for equivalent source fields:
+
+| Canonical field | ERP A | ERP B | ERP C |
+| --- | --- | --- | --- |
+| external ID | `customer_id` | `client_code` | `customer_code` |
+| name | `name` | `legal_name` | `customer_name` |
+| tax ID | `tax_id` | `vat_number` | `fiscal_id` |
+| country | `country` | `country` | `country_code` |
+| email | `email` | `contact_email` | `email_address` |
+
+Country and tax-ID normalization had also already become shared behavior independent of individual ERP providers.
+
+At this point, continuing to duplicate the complete mapping workflow in every integration would repeat stable behavior rather than preserve meaningful provider-specific logic.
+
+### Decision
+
+Represent simple structural field differences as declarative provider-specific mappings.
+
+Each ERP integration declares how its source fields correspond to the canonical customer structure:
+
+```text
+ERP-specific field mapping
+        ↓
+shared customer mapper
+        ↓
+shared normalization
+        ↓
+CanonicalCustomer
+        ↓
+ExternalSourceCustomer
+```
+
+The shared mapper owns the common transformation workflow, while each ERP integration retains knowledge of its own field names and source-system identity.
+
+Value normalization remains implemented as shared code rather than being encoded into the field-mapping configuration.
+
+### Trade-off
+
+The declarative mapping format intentionally supports only simple field-to-field mappings.
+
+It does not currently model more complex transformations such as nested source paths, fallback fields, field composition, conditional rules, or provider-specific business logic.
+
+This limitation is accepted because none of the current ERP integrations requires those capabilities.
+
+If future integrations introduce structural differences that cannot be represented cleanly by the current mapping format, the abstraction should be extended based on those concrete requirements rather than turned prematurely into a generic transformation language.
+
+### Alternatives considered
+
+- Continue implementing the complete mapping workflow independently for every ERP.
+- Introduce the generic mapping abstraction before multiple ERP implementations existed.
+- Build a generic transformation DSL supporting arbitrary mapping rules.
+- Store mapping definitions in a database at this stage.
+- Move normalization rules into provider-specific mapping configuration.
+
+### Consequences
+
+Adding an ERP with the same structural characteristics now primarily requires declaring its field mapping rather than duplicating the customer transformation workflow.
+
+Shared normalization and canonical model construction remain consistent across integrations.
+
+Provider-specific field names remain isolated at the integration boundary.
+
+The mapping definitions are currently stored in code. External persistence or runtime management of mappings is deliberately deferred until requirements such as independent updates, versioning, activation, or larger-scale mapping management emerge.
+
+ADR-001 remains as the historical record of why the abstraction was intentionally deferred until sufficient implementation evidence existed.
 
 ------------------------------------------------------------------------
 
