@@ -1,5 +1,7 @@
 import pytest
 
+from b2b_erp_data_integrator.exceptions import CustomerValidationError
+
 from b2b_erp_data_integrator.mapping.customer import (
     get_mapped_value,
     map_canonical_customer,
@@ -113,5 +115,5 @@ def test_map_canonical_customer_rejects_invalid_tax_id():
         "email": "contact_email",
     }
 
-    with pytest.raises(ValueError):
+    with pytest.raises(CustomerValidationError):
         map_canonical_customer(data, field_mapping)

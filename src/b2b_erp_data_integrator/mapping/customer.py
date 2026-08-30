@@ -1,3 +1,5 @@
+from b2b_erp_data_integrator.exceptions import CustomerValidationError
+
 from b2b_erp_data_integrator.models.customer import CanonicalCustomer
 from b2b_erp_data_integrator.models.external_source_customer import (
     ExternalSourceCustomer,
@@ -28,7 +30,7 @@ def map_canonical_customer(
     )
 
     if not validate_tax_id(tax_id, country):
-        raise ValueError(f"Invalid tax ID for country {country}")
+        raise CustomerValidationError(f"Invalid tax ID for country {country}")
 
     return CanonicalCustomer(
         name=get_mapped_value(data, field_mapping, "name"),
