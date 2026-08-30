@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 from b2b_erp_data_integrator.exceptions import CustomerValidationError
 from b2b_erp_data_integrator.models.external_source_customer import (
@@ -11,7 +11,7 @@ from b2b_erp_data_integrator.processing.result import (
 
 
 def process_customers(
-    records: list[dict],
+    records: Iterable[dict],
     mapper: Callable[[dict], ExternalSourceCustomer],
 ) -> BatchResult:
     result = BatchResult()

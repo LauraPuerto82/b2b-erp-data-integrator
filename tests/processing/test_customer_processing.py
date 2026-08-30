@@ -69,3 +69,29 @@ def test_process_customers_propagates_unexpected_value_errors():
 
     with pytest.raises(ValueError, match="Unexpected technical failure"):
         process_customers([record], broken_mapper)
+
+
+def test_process_customers_accepts_iterator():
+    records = iter(
+        [
+            {
+                "customer_id": "C001",
+                "name": "ACME SL",
+                "tax_id": "B12345678",
+                "country": "ES",
+                "email": "info@acme.es",
+            },
+            {
+                "customer_id": "C002",
+                "name": "Globex SL",
+                "tax_id": "A87654321",
+                "country": "ES",
+                "email": "contact@globex.es",
+            },
+        ]
+    )
+
+    result = process_customers(records, map_erp_a_customer)
+
+    assert len(result.processed) == 2
+    assert len(result.rejected) == 0
