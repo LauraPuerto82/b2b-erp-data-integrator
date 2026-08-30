@@ -281,6 +281,95 @@ ADR-001 remains as the historical record of why the abstraction was intentionall
 
 ------------------------------------------------------------------------
 
+## ADR-005 --- Allow partial success for business validation failures during batch processing
+
+**Status:** Accepted
+**Stage:** Customer batch processing
+
+### Context
+
+ERP integrations commonly process multiple records as a batch.
+
+A batch may contain valid customer records alongside records that fail supported business validation rules. Rejecting the entire batch because one customer contains invalid business data would unnecessarily discard records that can be processed correctly.
+
+At the same time, not every exception represents invalid source data. Unexpected programming or technical failures may indicate that the processing pipeline itself is no longer behaving reliably.
+
+Treating those failures as ordinary rejected records would hide system problems and could make a partially processed batch appear successful.
+
+The batch processor therefore needs to distinguish between expected data-quality failures and unexpected processing failures.
+
+### Decision
+
+Process customer records independently and allow partial success when a record fails a supported business validation.
+
+The processing flow is:
+
+```text
+source record
+      ↓
+provider mapper
+      ↓
+customer mapping and validation
+      ↓
+┌───────────────────────────────┐
+│ valid                         │
+│ → processed customer          │
+│                               │
+│ CustomerValidationError       │
+│ → rejected record             │
+│ → preserve raw input + reason │
+│ → continue batch              │
+│                               │
+│ unexpected exception          │
+│ → propagate                   │
+│ → fail processing visibly     │
+└───────────────────────────────┘
+```
+
+Supported customer business-validation failures are represented explicitly by `CustomerValidationError`.
+
+The batch processor catches only this expected validation exception. It preserves the complete raw source record together with the rejection reason and continues processing subsequent records.
+
+Unexpected exceptions are not converted into rejected records. They propagate to the caller so that technical or programming failures remain visible.
+
+The batch processor receives the provider mapper as a callable rather than depending directly on ERP-specific mappings or configuration. Its responsibility is therefore limited to batch orchestration and result classification, while provider-specific transformation remains at the integration boundary.
+
+### Trade-off
+
+This approach allows valid records to be processed even when other records in the same batch contain invalid business data.
+
+It also prevents unexpected technical failures from being silently misclassified as source-data problems.
+
+However, the current implementation operates entirely in memory and does not yet provide persistence, checkpoints, retry behavior, or recovery semantics.
+
+If an unexpected technical failure occurs after previous records have already been processed in memory, the exception propagates and a completed `BatchResult` is not returned.
+
+This behavior is acceptable at the current stage because persistent batch execution and recovery have not yet been introduced.
+
+### Alternatives considered
+
+- Fail the entire batch when any individual record fails business validation.
+- Catch all exceptions and convert every failure into a rejected record.
+- Catch generic `ValueError` exceptions and treat them as data-validation failures.
+- Make the batch processor aware of ERP-specific field mappings and transformation details.
+- Introduce database transactions, checkpoints, retries, or persistent batch state before persistence requirements exist.
+
+### Consequences
+
+A batch can contain both successfully processed customers and explicitly rejected source records.
+
+Rejected records preserve their original ERP representation and the reason for rejection, providing the information required for later inspection or reprocessing.
+
+Business-validation failures have explicit semantics and do not stop processing of unrelated valid records.
+
+Unexpected failures remain visible instead of being hidden as data-quality problems.
+
+Batch orchestration is independent of individual ERP providers and can be tested using controlled mapper implementations.
+
+Persistent batch state, transaction boundaries, batch identifiers, retry and reprocessing mechanisms, checkpoints, idempotency, persistent rejected-record storage, and richer error categorization remain deliberately deferred until persistence and operational processing requirements are introduced.
+
+------------------------------------------------------------------------
+
 # Known Technical Debt
 
 No known technical debt has been recorded yet.
