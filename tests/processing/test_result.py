@@ -1,4 +1,4 @@
-from b2b_erp_data_integrator.processing.result import RejectedRecord, BatchResult
+from b2b_erp_data_integrator.processing.result import BatchResult, RejectedRecord
 
 
 def test_rejected_record():

@@ -1,5 +1,4 @@
 from b2b_erp_data_integrator.exceptions import CustomerValidationError
-
 from b2b_erp_data_integrator.models.customer import CanonicalCustomer
 from b2b_erp_data_integrator.models.external_source_customer import (
     ExternalSourceCustomer,

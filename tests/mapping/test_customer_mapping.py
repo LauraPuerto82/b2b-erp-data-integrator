@@ -1,7 +1,6 @@
 import pytest
 
 from b2b_erp_data_integrator.exceptions import CustomerValidationError
-
 from b2b_erp_data_integrator.mapping.customer import (
     get_mapped_value,
     map_canonical_customer,

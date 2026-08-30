@@ -1,5 +1,4 @@
 from b2b_erp_data_integrator.mapping.customer import map_customer
-from b2b_erp_data_integrator.models import external_source_customer
 from b2b_erp_data_integrator.models.external_source_customer import (
     ExternalSourceCustomer,
 )

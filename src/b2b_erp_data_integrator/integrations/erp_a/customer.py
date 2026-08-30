@@ -3,7 +3,6 @@ from b2b_erp_data_integrator.models.external_source_customer import (
     ExternalSourceCustomer,
 )
 
-
 ERP_A_CUSTOMER_MAPPING = {
     "external_id": "customer_id",
     "name": "name",
