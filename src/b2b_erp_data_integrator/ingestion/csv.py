@@ -9,3 +9,9 @@ def read_csv(path: Path) -> Iterator[dict]:
 
         for record in reader:
             yield dict(record)
+
+
+def read_csv_fields(path: Path) -> set[str]:
+    with path.open(encoding="utf-8", newline="") as file:
+        reader = csv.DictReader(file)
+        return set(reader.fieldnames or [])

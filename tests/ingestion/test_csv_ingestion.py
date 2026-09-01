@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from b2b_erp_data_integrator.ingestion.csv import read_csv
+from b2b_erp_data_integrator.ingestion.csv import (
+    read_csv,
+    read_csv_fields,
+)
 from b2b_erp_data_integrator.integrations.erp_a.customer import (
     map_erp_a_customer,
 )
@@ -54,3 +57,22 @@ def test_csv_records_can_be_processed(tmp_path: Path):
 
     assert result.processed[0].customer.name == "ACME SL"
     assert result.processed[1].customer.name == "Globex SL"
+
+
+def test_read_csv_fields_returns_header_fields(tmp_path: Path):
+    csv_path = tmp_path / "customers.csv"
+    csv_path.write_text(
+        "client_code,legal_name,vat_number,country,contact_email\n"
+        "0001,ACME S.L.,ESB12345678,Spain,info@acme.es\n",
+        encoding="utf-8",
+    )
+
+    fields = read_csv_fields(csv_path)
+
+    assert fields == {
+        "client_code",
+        "legal_name",
+        "vat_number",
+        "country",
+        "contact_email",
+    }

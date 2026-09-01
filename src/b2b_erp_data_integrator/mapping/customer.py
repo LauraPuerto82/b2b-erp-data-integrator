@@ -1,4 +1,7 @@
 from b2b_erp_data_integrator.exceptions import CustomerValidationError
+from b2b_erp_data_integrator.mapping.required_fields import (
+    get_required_source_fields,
+)
 from b2b_erp_data_integrator.models.customer import CanonicalCustomer
 from b2b_erp_data_integrator.models.external_source_customer import (
     ExternalSourceCustomer,
@@ -51,3 +54,19 @@ def map_customer(
         external_id=get_mapped_value(data, field_mapping, "external_id"),
         customer=customer,
     )
+
+
+def get_required_customer_source_fields(
+    field_mapping: dict[str, str],
+) -> set[str]:
+    required_fields = get_required_source_fields(
+        CanonicalCustomer,
+        field_mapping,
+    )
+
+    external_id_field = ExternalSourceCustomer.model_fields["external_id"]
+
+    if external_id_field.is_required():
+        required_fields.add(field_mapping["external_id"])
+
+    return required_fields
