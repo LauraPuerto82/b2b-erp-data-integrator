@@ -24,6 +24,7 @@ def map_erp_a_customer(data: dict) -> ExternalSourceCustomer:
 
 
 ERP_A_CUSTOMER_PROVIDER = CustomerERPProvider(
+    source_system="ERP_A",
     field_mapping=ERP_A_CUSTOMER_MAPPING,
     mapper=map_erp_a_customer,
 )

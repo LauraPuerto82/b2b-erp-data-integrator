@@ -25,5 +25,6 @@ def test_map_erp_b_customer():
 
 
 def test_erp_b_customer_provider():
+    assert ERP_B_CUSTOMER_PROVIDER.source_system == "ERP_B"
     assert ERP_B_CUSTOMER_PROVIDER.field_mapping == ERP_B_CUSTOMER_MAPPING
     assert ERP_B_CUSTOMER_PROVIDER.mapper is map_erp_b_customer
