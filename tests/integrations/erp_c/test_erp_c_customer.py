@@ -1,4 +1,8 @@
-from b2b_erp_data_integrator.integrations.erp_c.customer import map_erp_c_customer
+from b2b_erp_data_integrator.integrations.erp_c.customer import (
+    ERP_C_CUSTOMER_MAPPING,
+    ERP_C_CUSTOMER_PROVIDER,
+    map_erp_c_customer,
+)
 
 
 def test_map_erp_c_customer():
@@ -18,3 +22,8 @@ def test_map_erp_c_customer():
     assert result.customer.tax_id == "B12345678"
     assert result.customer.country == "ES"
     assert result.customer.email == "info@acme.es"
+
+
+def test_erp_c_customer_provider():
+    assert ERP_C_CUSTOMER_PROVIDER.field_mapping == ERP_C_CUSTOMER_MAPPING
+    assert ERP_C_CUSTOMER_PROVIDER.mapper is map_erp_c_customer
