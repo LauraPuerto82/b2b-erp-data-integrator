@@ -370,6 +370,88 @@ Persistent batch state, transaction boundaries, batch identifiers, retry and rep
 
 ------------------------------------------------------------------------
 
+## ADR-006 --- Validate dataset structure before record processing
+
+**Status:** Accepted
+**Stage:** CSV ingestion and structural validation
+
+### Context
+
+CSV ingestion introduces a failure mode that is different from an individual customer failing business validation.
+
+A source dataset may be structurally incompatible with the selected ERP integration because one or more columns required to construct the mapped customer are missing.
+
+For example, ERP B requires source fields for the canonical customer data as well as `client_code`, which provides the external source identity. A CSV that contains `legal_name`, `vat_number`, and `country` but omits `client_code` cannot produce a complete `ExternalSourceCustomer`.
+
+Treating this as an ordinary per-record validation failure would cause every row to fail independently even though the actual problem affects the dataset as a whole.
+
+The system therefore needs to distinguish dataset-level structural incompatibility from record-level business-data invalidity.
+
+### Decision
+
+Validate the available dataset fields before record processing begins.
+
+The structural validation flow is:
+
+```text
+read dataset fields
+        ↓
+derive required source fields
+        ↓
+compare available vs required fields
+        ↓
+┌───────────────────────────────┐
+│ all required fields present   │
+│ → continue with record        │
+│   processing                  │
+│                               │
+│ required fields missing       │
+│ → IngestionError              │
+│ → fail before processing rows │
+└───────────────────────────────┘
+```
+
+Required canonical fields are derived from Pydantic model metadata rather than duplicated manually. The provider-specific field mapping is then used to translate those canonical requirements into the corresponding source column names.
+
+Customer ingestion also explicitly requires the mapped `external_id` source field because `ExternalSourceCustomer` cannot be constructed without source identity. `source_system` does not require a dataset column because it is supplied by the ERP integration itself.
+
+Optional canonical fields such as `email` are not required for dataset compatibility.
+
+Missing required dataset fields raise `IngestionError`. This remains distinct from `CustomerValidationError`, which represents a structurally processable record that fails supported business validation.
+
+### Trade-off
+
+Structural validation adds a separate inspection step before record processing and requires the ingestion layer to expose dataset field information.
+
+The current implementation derives canonical requirements through Pydantic introspection but still composes Customer-specific source requirements explicitly where provenance matters, such as `external_id`.
+
+This is slightly less generic than attempting to infer every source requirement automatically from the complete output model. In return, it avoids hiding an important distinction: some required output fields come from the source dataset while others are constructed or supplied internally.
+
+The generic required-field helper also remains strict when a required model field is absent from a field mapping. It does not silently ignore incomplete mapping configuration.
+
+### Alternatives considered
+
+- Start processing records immediately and allow missing columns to fail during mapping.
+- Treat missing dataset columns as `CustomerValidationError` and reject every affected row independently.
+- Maintain a separate manually duplicated list of required source columns for every ERP integration.
+- Require every mapped field, including optional canonical fields such as `email`.
+- Infer all required source fields directly from `ExternalSourceCustomer` without distinguishing source-provided values from internally supplied or constructed values.
+- Make the generic required-field helper silently ignore required model fields that are absent from the provider mapping.
+
+### Consequences
+
+Structurally incompatible datasets fail early before any customer records are processed.
+
+Dataset-level ingestion failures and record-level business-validation failures now have separate semantics and can be handled independently.
+
+Required source fields remain aligned with the canonical model as requiredness evolves, while provider-specific mappings continue to define the source column names.
+
+External source identity is treated as part of the minimum data required to construct a complete mapped customer, even though it is not a field of `CanonicalCustomer`.
+
+Optional source columns may be absent without making the dataset structurally invalid.
+
+Future ingestion formats can reuse the same structural-validation semantics as long as they can expose their available fields before record processing.
+
 # Known Technical Debt
 
 No known technical debt has been recorded yet.
