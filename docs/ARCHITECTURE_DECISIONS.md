@@ -452,6 +452,95 @@ Optional source columns may be absent without making the dataset structurally in
 
 Future ingestion formats can reuse the same structural-validation semantics as long as they can expose their available fields before record processing.
 
+------------------------------------------------------------------------
+
+## ADR-007 --- Track processing executions separately from batch results
+
+**Status:** Accepted
+**Stage:** Customer CSV orchestration and processing traceability
+
+### Context
+
+The batch-processing layer already distinguishes successfully processed customer records from records rejected because of supported business-validation failures.
+
+`BatchResult` therefore answers a record-level question: which records were processed successfully and which were rejected.
+
+Once CSV ingestion and orchestration were introduced, the system also needed to represent information about the execution as a whole. A processing attempt has context that exists independently of the individual record outcomes, including the ERP source, the input being processed, execution timestamps, and whether the dataset-level operation completed or failed.
+
+This distinction becomes especially important for failures that occur before a batch result can exist. For example, a CSV dataset that is missing a required source column raises `IngestionError` during structural validation and cannot produce a meaningful `BatchResult`.
+
+### Decision
+
+Represent execution-level state using a separate `ProcessingRun` model rather than expanding `BatchResult` with orchestration metadata.
+
+The responsibilities are:
+
+```text
+ProcessingRun
+├── source_system
+├── input_source
+├── started_at
+├── finished_at
+├── status
+├── result
+└── error
+
+BatchResult
+├── processed
+└── rejected
+```
+
+`ProcessingRunStatus` defines the execution states:
+
+```text
+RUNNING
+   ├──→ COMPLETED
+   └──→ FAILED
+```
+
+The customer CSV orchestrator returns a `ProcessingRun`.
+
+A structurally valid dataset produces a `COMPLETED` run even when some individual records are rejected by supported business validation. Those rejected records remain part of the `BatchResult`.
+
+A dataset-level ingestion failure represented by `IngestionError` produces a `FAILED` run with no `BatchResult` and preserves the error message for later inspection.
+
+Unexpected exceptions are not converted into `FAILED` runs. They continue to propagate so that programming and technical failures are not silently normalized into expected integration outcomes.
+
+ERP providers expose their `source_system` explicitly so that orchestration and future traceability do not need to infer provider identity indirectly from mapper implementation details.
+
+### Trade-off
+
+Introducing `ProcessingRun` adds a second result concept alongside `BatchResult`.
+
+This creates a slightly richer model, but it keeps record-level processing outcomes separate from execution-level lifecycle and traceability.
+
+The current implementation is still in memory. Processing runs do not yet have persistent identifiers, durable storage, retry or recovery state, or persistent links to processed and rejected outputs.
+
+The `ProcessingRun` dataclass also does not currently enforce cross-field state invariants such as requiring `result` for every `COMPLETED` run or requiring `error` for every `FAILED` run. Those constraints are intentionally deferred until the lifecycle model needs stronger persistence or external serialization guarantees.
+
+### Alternatives considered
+
+- Add source, timestamps, status, and error metadata directly to `BatchResult`.
+- Continue returning `BatchResult` on success and propagating all expected ingestion failures as exceptions.
+- Mark a complete processing run as `FAILED` whenever any individual customer record is rejected.
+- Catch every exception and convert it into a `FAILED` processing run.
+- Introduce persistent run state, run identifiers, retries, and recovery semantics immediately.
+- Infer the ERP source system indirectly from provider mapper behavior instead of declaring it explicitly.
+
+### Consequences
+
+Record-level and execution-level outcomes now have separate semantics.
+
+A run may be `COMPLETED` while containing both processed and rejected records, preserving the partial-success behavior defined in ADR-005.
+
+Dataset-level structural incompatibility can be represented as a failed execution even when no batch result exists.
+
+The ERP source system and input source are available as execution context, creating a clean boundary for later persistence, observability, audit history, and reprocessing features.
+
+Future storage decisions can persist `ProcessingRun`, processed outputs, and rejected outputs independently without changing the meaning of `BatchResult`.
+
+Unexpected technical failures remain visible instead of being hidden as ordinary integration failures.
+
 # Known Technical Debt
 
 No known technical debt has been recorded yet.
