@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from b2b_erp_data_integrator.ingestion.csv import (
+from b2b_erp_data_integrator.ingestion import (
     read_csv,
     read_csv_fields,
 )

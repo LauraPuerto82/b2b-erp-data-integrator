@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from b2b_erp_data_integrator.output.rejected_jsonl import write_rejected_jsonl
+from b2b_erp_data_integrator.output import write_rejected_jsonl
 from b2b_erp_data_integrator.processing.result import RejectedRecord
 
 

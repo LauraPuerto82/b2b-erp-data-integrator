@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from b2b_erp_data_integrator.exceptions import IngestionError
-from b2b_erp_data_integrator.ingestion.csv import (
+from b2b_erp_data_integrator.ingestion import (
     read_csv_fields,
 )
 from b2b_erp_data_integrator.integrations.erp_b.customer import (

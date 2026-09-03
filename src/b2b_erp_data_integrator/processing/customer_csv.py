@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from b2b_erp_data_integrator.exceptions import IngestionError
-from b2b_erp_data_integrator.ingestion.csv import read_csv, read_csv_fields
+from b2b_erp_data_integrator.ingestion import read_csv, read_csv_fields
 from b2b_erp_data_integrator.integrations.customer_erp_provider import (
     CustomerERPProvider,
 )
