@@ -368,6 +368,8 @@ Batch orchestration is independent of individual ERP providers and can be tested
 
 Persistent batch state, transaction boundaries, batch identifiers, retry and reprocessing mechanisms, checkpoints, idempotency, persistent rejected-record storage, and richer error categorization remain deliberately deferred until persistence and operational processing requirements are introduced.
 
+Persistent rejected-record output was subsequently partially addressed by ADR-009 through local JSONL serialization.
+
 ------------------------------------------------------------------------
 
 ## ADR-006 --- Validate dataset structure before record processing
@@ -540,6 +542,197 @@ The ERP source system and input source are available as execution context, creat
 Future storage decisions can persist `ProcessingRun`, processed outputs, and rejected outputs independently without changing the meaning of `BatchResult`.
 
 Unexpected technical failures remain visible instead of being hidden as ordinary integration failures.
+
+------------------------------------------------------------------------
+
+## ADR-008 --- Generate stable canonical customer identities from normalized business identity
+
+**Status:** Accepted
+**Stage:** Canonical customer identity
+
+### Context
+
+`ExternalSourceCustomer` preserves the identity assigned by the originating ERP through `source_system` and `external_id`.
+
+That identity is necessary for provenance, but it is not suitable as the common identity of a canonical customer. The same real customer may exist in multiple ERP systems under different external identifiers.
+
+For example:
+
+```text
+ERP A / C001 ─┐
+              ├── same canonical customer
+ERP B / 0001 ─┘
+```
+
+Downstream canonical outputs therefore require an identifier that is independent of the originating ERP and remains stable when the same logical customer is processed again.
+
+The current customer model already normalizes the fields used to establish business identity before canonical identity is generated.
+
+### Decision
+
+Generate a deterministic canonical `customer_id` using UUID5.
+
+The identity key is constructed from the normalized canonical country and tax ID:
+
+```text
+country + tax_id
+      ↓
+identity key
+      ↓
+UUID5 with fixed namespace
+      ↓
+customer_id
+```
+
+For example:
+
+```text
+ES:B12345678
+      ↓
+25013cb5-a708-5c14-a1f1-f2ddbe8e9d35
+```
+
+The resulting identifier is represented together with the canonical customer as `IdentifiedCanonicalCustomer`.
+
+`name` and `email` are intentionally excluded from the identity key. They may change without changing the underlying business identity of the customer.
+
+External ERP identity is not removed from the processing model. `ExternalSourceCustomer` continues to preserve `source_system` and `external_id`, while canonical identity is derived downstream when canonical output is required.
+
+### Trade-off
+
+The identity rule assumes that normalized `country + tax_id` is sufficient to identify a customer for the current integration scenarios.
+
+This is deliberately narrower than a complete entity-resolution or master-data-management strategy.
+
+UUID5 also makes the identity-generation contract persistent: changing the namespace or the construction of the identity key would produce different identifiers for customers that had previously received stable IDs.
+
+In return, the same normalized business identity produces the same canonical identifier without requiring a central database sequence or lookup.
+
+### Alternatives considered
+
+- Generate a random UUID4 for every processed customer.
+- Reuse the external ERP identifier as the canonical customer identifier.
+- Include mutable fields such as name or email in the identity key.
+- Introduce a persistent identity-resolution database before a storage requirement exists.
+- Implement probabilistic or fuzzy entity matching at this stage.
+
+### Consequences
+
+Equivalent customers from different ERP systems can independently produce the same canonical `customer_id`.
+
+Repeated processing of the same normalized customer identity also produces the same identifier.
+
+Canonical identity remains independent of source-system identifiers while source provenance is still preserved earlier in the processing flow.
+
+The current rule does not resolve customers that represent the same real entity but have different or missing tax IDs. More advanced identity resolution should be introduced only if concrete integration scenarios require it.
+
+The fixed UUID namespace and identity-key format must be treated as part of the canonical identity contract once persisted outputs depend on them.
+
+------------------------------------------------------------------------
+
+## ADR-009 --- Persist processed canonical customers as Parquet and rejected source records as JSONL
+
+**Status:** Accepted for MVP
+**Stage:** Local processing outputs
+
+### Context
+
+Batch processing produces two categories of record-level outcomes with different downstream purposes.
+
+Successfully processed records have been mapped, normalized, and validated and are suitable for canonical downstream consumption.
+
+Rejected records intentionally preserve their original ERP representation together with the reason they could not be processed.
+
+These outputs therefore have different data shapes and operational requirements.
+
+Processed canonical customers also require stable common identity before persistence. Multiple source records may resolve to the same canonical `customer_id`, and writing every occurrence independently would create duplicate canonical rows.
+
+At the same time, Parquet is a file format rather than a database table and does not provide SQL-style primary-key constraints or `UPSERT` semantics.
+
+### Decision
+
+Persist the two output categories separately:
+
+```text
+BatchResult
+├── processed
+│      ↓
+│   canonical identity
+│      ↓
+│   deduplicate by customer_id
+│      ↓
+│   Parquet
+│
+└── rejected
+       ↓
+    JSONL
+```
+
+Processed customers are transformed into `IdentifiedCanonicalCustomer` values and deduplicated by `customer_id` before canonical output.
+
+The current duplicate-resolution policy is `first wins`. If multiple identified customers with the same `customer_id` appear in the input stream, the first representation is retained and subsequent representations are skipped.
+
+The canonical Parquet output uses a flat schema:
+
+```text
+customer_id
+name
+tax_id
+country
+email
+```
+
+Source-system identity is intentionally not included in this canonical dataset. `ExternalSourceCustomer` continues to preserve provenance during processing, and a future lineage dataset may persist relationships between external identities and canonical identities if required.
+
+Parquet output is written incrementally using bounded batches rather than materializing the complete canonical dataset in an additional in-memory collection. The batch size is configurable and defaults to 1,000 records.
+
+Rejected records are written as JSON Lines. Each line preserves:
+
+```text
+raw_record
+reason
+```
+
+This keeps the original source representation available for investigation and later reprocessing.
+
+### Trade-off
+
+Using different formats for processed and rejected outputs introduces two serialization paths.
+
+The `first wins` duplicate policy is intentionally simple. If two ERP sources resolve to the same canonical identity but provide different non-identity values such as name or email, the current implementation does not reconcile them or define source priority.
+
+The in-memory deduplication step retains the set of previously seen canonical UUIDs for the duration of the stream. Memory usage therefore grows with the number of unique identities even though complete customer objects are not accumulated by the deduplicator.
+
+Parquet writing is batched, but the current design does not provide persistent global uniqueness or update semantics across separate executions.
+
+### Alternatives considered
+
+- Write processed and rejected records using the same output format.
+- Preserve processed canonical output as JSON or JSONL instead of Parquet.
+- Include `source_system` and `external_id` directly in the canonical customer dataset.
+- Write every identified customer to Parquet and allow duplicate `customer_id` values.
+- Treat a repeated `customer_id` as an update and overwrite previous values.
+- Introduce source-priority or field-level reconciliation rules before conflicting source data has been observed.
+- Load all processed customers into memory before writing the Parquet file.
+- Introduce a database or table format with native merge/upsert semantics at this stage.
+
+### Consequences
+
+Processed and rejected outputs now have explicit and independent persistence representations.
+
+Canonical customer output contains at most one row per `customer_id` for the stream passed through the current deduplication step.
+
+The deterministic identity defined in ADR-008 provides stable IDs, while deduplication prevents repeated identities within that processing stream from producing duplicate canonical rows.
+
+This does not yet provide persistent idempotency across independent executions. Reprocessing data against an existing Parquet output does not currently perform a global lookup, merge, or upsert against previously persisted customer IDs.
+
+The current `first wins` behavior should be reconsidered if concrete scenarios require source precedence, conflict resolution, field-level merging, or master-data-management semantics.
+
+Batch-oriented Parquet writing keeps additional writer memory bounded by the configured batch size and provides a suitable local representation for later data-platform integration.
+
+Rejected JSONL output preserves enough source context to investigate validation failures without forcing heterogeneous raw ERP records into the canonical Parquet schema.
+
+Future durable storage can persist canonical Parquet output, rejected JSONL output, processing-run metadata, and external-to-canonical lineage independently.
 
 # Known Technical Debt
 

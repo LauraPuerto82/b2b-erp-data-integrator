@@ -50,6 +50,7 @@ A `COMPLETED` processing run may therefore contain both processed and rejected r
 
 - Python 3.12
 - Pydantic
+- PyArrow / Parquet
 - pytest
 - Ruff
 - MyPy
@@ -69,8 +70,16 @@ uv run pytest
 
 Significant design decisions, trade-offs, and intentionally deferred work are documented in `docs/ARCHITECTURE_DECISIONS.md`.
 
+## Local output capabilities
+
+Processed canonical customers can be assigned a stable canonical identity, deduplicated by `customer_id`, and written to Parquet in bounded batches.
+
+Rejected source records can be written to JSONL while preserving the original record and rejection reason.
+
+These output components are implemented and tested independently. End-to-end orchestration from `ProcessingRun` to persisted outputs is the next local pipeline step.
+
 ## Next stages
 
-The current pipeline runs locally. Persistence and output traceability are the next design area.
+The current pipeline runs locally. The next step is to connect processing results to the implemented Parquet and JSONL output components.
 
-S3 and AWS Glue are planned later in the project as cloud data-platform components, after the local integration semantics and processing boundaries are established. They are not yet implemented.
+S3 and AWS Glue are planned later in the project as cloud data-platform components, after the local pipeline is connected end to end. They are not yet implemented.
