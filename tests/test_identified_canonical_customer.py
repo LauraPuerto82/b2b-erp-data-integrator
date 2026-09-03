@@ -3,6 +3,7 @@ from uuid import UUID
 from b2b_erp_data_integrator.models.customer import CanonicalCustomer
 from b2b_erp_data_integrator.models.identified_canonical_customer import (
     IdentifiedCanonicalCustomer,
+    deduplicate_customers,
     generate_customer_id,
     identify_customer,
 )
@@ -86,3 +87,49 @@ def test_identify_customer():
 
     assert result.customer_id == generate_customer_id(customer)
     assert result.customer == customer
+
+
+def test_deduplicate_customers_keeps_first_customer():
+    first = identify_customer(
+        CanonicalCustomer(
+            name="ACME S.L.",
+            tax_id="B12345678",
+            country="ES",
+            email="info@acme.es",
+        )
+    )
+
+    second = identify_customer(
+        CanonicalCustomer(
+            name="ACME Sociedad Limitada",
+            tax_id="B12345678",
+            country="ES",
+            email="ventas@acme.es",
+        )
+    )
+
+    result = list(deduplicate_customers([first, second]))
+
+    assert result == [first]
+
+
+def test_deduplicate_customers_keeps_different_customers():
+    first = identify_customer(
+        CanonicalCustomer(
+            name="ACME S.L.",
+            tax_id="B12345678",
+            country="ES",
+        )
+    )
+
+    second = identify_customer(
+        CanonicalCustomer(
+            name="Globex S.L.",
+            tax_id="A87654321",
+            country="ES",
+        )
+    )
+
+    result = list(deduplicate_customers([first, second]))
+
+    assert result == [first, second]

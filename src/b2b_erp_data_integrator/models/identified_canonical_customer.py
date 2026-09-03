@@ -1,3 +1,4 @@
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from uuid import UUID, uuid5
 
@@ -28,3 +29,16 @@ def identify_customer(
         customer_id=generate_customer_id(customer),
         customer=customer,
     )
+
+
+def deduplicate_customers(
+    customers: Iterable[IdentifiedCanonicalCustomer],
+) -> Iterator[IdentifiedCanonicalCustomer]:
+    seen_ids: set[UUID] = set()
+
+    for customer in customers:
+        if customer.customer_id in seen_ids:
+            continue
+
+        seen_ids.add(customer.customer_id)
+        yield customer
