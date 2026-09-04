@@ -736,6 +736,34 @@ Future durable storage can persist canonical Parquet output, rejected JSONL outp
 
 # Known Technical Debt
 
-No known technical debt has been recorded yet.
+## TD-001 --- Persistent idempotency across processing executions
 
-Technical limitations that are deliberately accepted as the project evolves will be documented here when they represent unresolved engineering work rather than an architectural decision.
+**Related decisions:** ADR-008, ADR-009
+
+### Current limitation
+
+Deduplication currently applies only within a single processing execution.
+
+The deduplication state (`seen_customer_ids`) is held in memory for the duration of the stream and is discarded when the execution finishes. A later execution therefore does not know which canonical customer IDs were persisted by previous runs.
+
+The deterministic UUID5 identity defined in ADR-008 ensures that the same normalized business identity produces the same `customer_id` across executions. It does not, by itself, prevent that customer from being persisted again in a later execution.
+
+This affects scenarios such as:
+
+- retrying the same input file after a failure;
+- intentionally reprocessing a previously processed file;
+- receiving a later ERP export containing customers that were already processed in an earlier run.
+
+In each case, a later execution may produce a `customer_id` that already exists in previously persisted canonical output. The current Parquet output does not perform a global lookup, merge, or upsert against that prior state.
+
+### Why it is deferred
+
+Persistent cross-run idempotency depends on the final persistence strategy and on the required semantics for repeated customers. The system will need to decide whether an existing canonical customer should be ignored, updated, or reconciled when new data for the same `customer_id` arrives.
+
+Introducing a database, global index, merge process, or table format with update semantics before those persistence requirements are established would prematurely constrain the design.
+
+### Future resolution
+
+When durable persistence is introduced, the architecture must provide an explicit mechanism for detecting previously persisted `customer_id` values across executions and define the behavior for repeated identities.
+
+Until then, the current guarantees are deliberately limited to deterministic canonical identity and in-stream deduplication within a processing execution. Persistent idempotency across independent executions is not guaranteed.
