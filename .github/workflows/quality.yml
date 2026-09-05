@@ -32,5 +32,25 @@ jobs:
       - name: MyPy
         run: uv run mypy src tests
 
+      - name: Start MiniStack
+        run: |
+          docker run -d \
+            --name ministack \
+            -p 4566:4566 \
+            -e LOG_LEVEL=WARNING \
+            ministackorg/ministack:latest
+
+      - name: Wait for MiniStack
+        run: |
+          for i in {1..30}; do
+            if curl --fail http://localhost:4566/_ministack/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs ministack
+          exit 1
+
       - name: Pytest
         run: uv run pytest
