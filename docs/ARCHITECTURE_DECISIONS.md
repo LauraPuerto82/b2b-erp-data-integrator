@@ -736,6 +736,88 @@ Rejected JSONL output preserves enough source context to investigate validation 
 
 Future durable storage can persist canonical Parquet output, rejected JSONL output, processing-run metadata, and external-to-canonical lineage independently.
 
+------------------------------------------------------------------------
+
+## ADR-010 --- Stream S3 input and avoid full-file in-memory output uploads
+
+**Status:** Accepted
+**Stage:** S3-backed pipeline execution
+
+### Context
+
+Introducing S3 created two additional memory boundaries around the existing customer-processing pipeline.
+
+For input, reading the complete S3 object into `bytes` before processing would require the whole source dataset to fit in memory and would also create an unnecessary temporary `input.csv`.
+
+For output, reading generated Parquet and JSONL files back with `Path.read_bytes()` before uploading them would create an additional complete in-memory copy of each file.
+
+### Decision
+
+Consume S3 CSV input directly from the object response stream:
+
+```text
+S3 object
+   ↓
+StreamingBody
+   ↓
+TextIOWrapper
+   ↓
+single-pass CSV structure + record parsing
+   ↓
+process_customer_stream()
+```
+
+Local-file and S3-backed execution therefore share the same stream-oriented customer-processing core.
+
+For outputs, continue writing Parquet and JSONL to local temporary files, but upload those files using Boto3 file transfer instead of `Path.read_bytes()` followed by an in-memory object upload.
+
+```text
+ProcessingRun
+   ↓
+shared output processing
+   ↓
+temporary Parquet / JSONL files
+   ↓
+Boto3 file upload
+   ↓
+S3
+```
+
+S3 integration is developed and tested against MiniStack through Boto3, both locally and in GitHub Actions.
+
+### Trade-off
+
+The S3 input path no longer requires the complete object to be held in memory and does not create a temporary input file.
+
+Output upload also avoids loading the complete generated file into memory before transfer.
+
+However, generated Parquet and JSONL outputs still use temporary local files. The current implementation therefore improves memory behavior without claiming to provide a fully diskless streaming pipeline.
+
+Keeping temporary output files is accepted at this stage because Parquet serialization already writes in bounded batches and removing the file boundary would add complexity around seekable output targets, multipart upload behavior, buffering, failure recovery, and finalization.
+
+MiniStack validates the S3 API integration but does not replace validation of IAM, networking, service limits, observability, or other operational concerns in a real AWS environment.
+
+### Alternatives considered
+
+- Read the complete S3 input object into memory before processing.
+- Download the S3 input to a temporary local file.
+- Read generated output files completely with `Path.read_bytes()` before uploading them.
+- Eliminate all temporary output files immediately.
+- Implement multipart upload orchestration directly.
+- Use a real AWS account for development and CI.
+
+### Consequences
+
+S3 input shares the same stream-oriented processing core as local CSV ingestion.
+
+The S3 execution path does not create a temporary `input.csv` and does not require a complete in-memory copy of the source object before processing.
+
+Generated Parquet and JSONL outputs retain their bounded local serialization behavior, while S3 upload no longer creates an additional complete `bytes` representation of each file.
+
+MiniStack allows the S3 integration boundary to be exercised locally and in GitHub Actions without incurring AWS infrastructure costs.
+
+Real AWS deployment remains a separate future concern.
+
 # Known Technical Debt
 
 ## TD-001 --- Persistent idempotency across processing executions
