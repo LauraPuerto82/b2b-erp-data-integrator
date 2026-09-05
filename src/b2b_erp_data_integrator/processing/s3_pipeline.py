@@ -11,7 +11,7 @@ from b2b_erp_data_integrator.processing.pipeline import write_processing_outputs
 from b2b_erp_data_integrator.processing.run import ProcessingRun
 from b2b_erp_data_integrator.storage import (
     stream_s3_object,
-    write_s3_object,
+    upload_s3_file,
 )
 
 
@@ -47,19 +47,19 @@ def run_customer_s3_pipeline(
     )
 
     if processed_path.exists():
-        write_s3_object(
+        upload_s3_file(
             client=client,
             bucket=bucket,
             key=processed_key,
-            content=processed_path.read_bytes(),
+            path=processed_path,
         )
 
     if rejected_path.exists():
-        write_s3_object(
+        upload_s3_file(
             client=client,
             bucket=bucket,
             key=rejected_key,
-            content=rejected_path.read_bytes(),
+            path=rejected_path,
         )
 
     return run

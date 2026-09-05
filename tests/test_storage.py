@@ -1,6 +1,7 @@
 from b2b_erp_data_integrator.storage import (
     read_s3_object,
     stream_s3_object,
+    upload_s3_file,
     write_s3_object,
 )
 
@@ -52,3 +53,23 @@ def test_stream_s3_object(s3_client, s3_bucket):
     )
 
     assert body.read() == b"hello from streaming s3"
+
+
+def test_upload_s3_file(tmp_path, s3_client, s3_bucket):
+    path = tmp_path / "output.txt"
+    path.write_text("uploaded without read_bytes", encoding="utf-8")
+
+    upload_s3_file(
+        client=s3_client,
+        bucket=s3_bucket,
+        key="output/output.txt",
+        path=path,
+    )
+
+    content = read_s3_object(
+        client=s3_client,
+        bucket=s3_bucket,
+        key="output/output.txt",
+    )
+
+    assert content == b"uploaded without read_bytes"
