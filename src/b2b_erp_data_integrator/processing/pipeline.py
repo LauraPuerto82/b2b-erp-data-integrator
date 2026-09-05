@@ -15,19 +15,13 @@ from b2b_erp_data_integrator.processing.customer_csv import process_customer_csv
 from b2b_erp_data_integrator.processing.run import ProcessingRun
 
 
-def run_customer_pipeline(
-    input_path: Path,
-    provider: CustomerERPProvider,
+def write_processing_outputs(
+    run: ProcessingRun,
     processed_path: Path,
     rejected_path: Path,
-) -> ProcessingRun:
-    run = process_customer_csv(
-        path=input_path,
-        provider=provider,
-    )
-
+) -> None:
     if run.result is None:
-        return run
+        return
 
     identified_customers = (
         identify_customer(external_customer.customer)
@@ -44,6 +38,24 @@ def run_customer_pipeline(
     write_rejected_jsonl(
         path=rejected_path,
         rejected=run.result.rejected,
+    )
+
+
+def run_customer_pipeline(
+    input_path: Path,
+    provider: CustomerERPProvider,
+    processed_path: Path,
+    rejected_path: Path,
+) -> ProcessingRun:
+    run = process_customer_csv(
+        path=input_path,
+        provider=provider,
+    )
+
+    write_processing_outputs(
+        run=run,
+        processed_path=processed_path,
+        rejected_path=rejected_path,
     )
 
     return run
