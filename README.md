@@ -31,7 +31,21 @@ batch processing
    ↓
 ProcessingRun
    ├── COMPLETED
+   │      ├── processed customers
+   │      │      ↓
+   │      │   canonical identity
+   │      │      ↓
+   │      │   deduplicate by customer_id
+   │      │      ↓
+   │      │   Parquet
+   │      │
+   │      └── rejected records
+   │             ↓
+   │          JSONL
+   │
    └── FAILED
+          ↓
+       no outputs
 ```
 
 Three example ERP providers are currently implemented. Each provider declares its source-system identity, structural field mapping, and customer mapper while sharing the canonical transformation workflow.
@@ -72,14 +86,16 @@ Significant design decisions, trade-offs, and intentionally deferred work are do
 
 ## Local output capabilities
 
-Processed canonical customers can be assigned a stable canonical identity, deduplicated by `customer_id`, and written to Parquet in bounded batches.
+The local customer pipeline now orchestrates processing results end to end.
 
-Rejected source records can be written to JSONL while preserving the original record and rejection reason.
+For a completed processing run, processed canonical customers are assigned a stable canonical identity, deduplicated by `customer_id`, and written to Parquet in bounded batches.
 
-These output components are implemented and tested independently. End-to-end orchestration from `ProcessingRun` to persisted outputs is the next local pipeline step.
+Rejected source records are written to JSONL while preserving the original record and rejection reason.
+
+Structurally invalid datasets produce a failed processing run and do not generate processed or rejected outputs.
 
 ## Next stages
 
-The current pipeline runs locally. The next step is to connect processing results to the implemented Parquet and JSONL output components.
+The local customer-integration pipeline is now connected end to end from CSV ingestion through persisted Parquet and JSONL outputs.
 
-S3 and AWS Glue are planned later in the project as cloud data-platform components, after the local pipeline is connected end to end. They are not yet implemented.
+S3 and AWS Glue are planned as the next cloud data-platform components. They are not yet implemented.

@@ -720,6 +720,8 @@ Parquet writing is batched, but the current design does not provide persistent g
 
 Processed and rejected outputs now have explicit and independent persistence representations.
 
+The local customer pipeline orchestrates these outputs from a completed `ProcessingRun`: processed customers are identified, deduplicated, and written to Parquet, while rejected records are written to JSONL. A failed processing run with no `BatchResult` does not generate either output.
+
 Canonical customer output contains at most one row per `customer_id` for the stream passed through the current deduplication step.
 
 The deterministic identity defined in ADR-008 provides stable IDs, while deduplication prevents repeated identities within that processing stream from producing duplicate canonical rows.
