@@ -1,4 +1,8 @@
-from b2b_erp_data_integrator.storage import read_s3_object, write_s3_object
+from b2b_erp_data_integrator.storage import (
+    read_s3_object,
+    stream_s3_object,
+    write_s3_object,
+)
 
 
 def test_read_s3_object(s3_client, s3_bucket):
@@ -32,3 +36,19 @@ def test_write_s3_object(s3_client, s3_bucket):
     )
 
     assert content == b"written from boto3"
+
+
+def test_stream_s3_object(s3_client, s3_bucket):
+    s3_client.put_object(
+        Bucket=s3_bucket,
+        Key="stream-input.txt",
+        Body=b"hello from streaming s3",
+    )
+
+    body = stream_s3_object(
+        client=s3_client,
+        bucket=s3_bucket,
+        key="stream-input.txt",
+    )
+
+    assert body.read() == b"hello from streaming s3"

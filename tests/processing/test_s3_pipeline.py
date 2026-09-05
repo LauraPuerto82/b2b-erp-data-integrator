@@ -52,6 +52,7 @@ def test_run_customer_s3_pipeline_writes_processed_parquet(
 
     assert table.num_rows == 1
     assert table.column("name").to_pylist() == ["ACME S.L."]
+    assert not (tmp_path / "input.csv").exists()
 
 
 def test_run_customer_s3_pipeline_writes_rejected_jsonl(

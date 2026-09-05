@@ -1,8 +1,11 @@
+from io import StringIO
 from pathlib import Path
 
 from b2b_erp_data_integrator.ingestion import (
     read_csv,
     read_csv_fields,
+    read_csv_stream,
+    read_csv_stream_with_fields,
 )
 from b2b_erp_data_integrator.integrations.erp_a.customer import (
     map_erp_a_customer,
@@ -76,3 +79,50 @@ def test_read_csv_fields_returns_header_fields(tmp_path: Path):
         "country",
         "contact_email",
     }
+
+
+def test_read_csv_stream():
+    stream = StringIO(
+        "customer_id,name,tax_id\n"
+        "C001,ACME S.L.,B12345678\n"
+        "C002,Globex S.L.,B87654321\n"
+    )
+
+    records = list(read_csv_stream(stream))
+
+    assert records == [
+        {
+            "customer_id": "C001",
+            "name": "ACME S.L.",
+            "tax_id": "B12345678",
+        },
+        {
+            "customer_id": "C002",
+            "name": "Globex S.L.",
+            "tax_id": "B87654321",
+        },
+    ]
+
+
+def test_read_csv_stream_with_fields():
+    stream = StringIO(
+        "customer_id,name,tax_id\n"
+        "C001,ACME S.L.,B12345678\n"
+        "C002,Globex S.L.,B87654321\n"
+    )
+
+    fields, records = read_csv_stream_with_fields(stream)
+
+    assert fields == {"customer_id", "name", "tax_id"}
+    assert list(records) == [
+        {
+            "customer_id": "C001",
+            "name": "ACME S.L.",
+            "tax_id": "B12345678",
+        },
+        {
+            "customer_id": "C002",
+            "name": "Globex S.L.",
+            "tax_id": "B87654321",
+        },
+    ]

@@ -1,9 +1,14 @@
+from io import StringIO
 from pathlib import Path
 
+from b2b_erp_data_integrator.integrations.erp_a.customer import ERP_A_CUSTOMER_PROVIDER
 from b2b_erp_data_integrator.integrations.erp_b.customer import (
     ERP_B_CUSTOMER_PROVIDER,
 )
-from b2b_erp_data_integrator.processing.customer_csv import process_customer_csv
+from b2b_erp_data_integrator.processing.customer_csv import (
+    process_customer_csv,
+    process_customer_stream,
+)
 from b2b_erp_data_integrator.processing.run import ProcessingRunStatus
 
 
@@ -84,3 +89,21 @@ def test_process_customer_csv_completes_with_rejected_records(tmp_path: Path):
     assert run.result is not None
     assert len(run.result.processed) == 1
     assert len(run.result.rejected) == 1
+
+
+def test_process_customer_stream():
+    stream = StringIO(
+        "customer_id,name,tax_id,country,email\n"
+        "C001,ACME S.L.,B12345678,ES,info@acme.es\n"
+    )
+
+    run = process_customer_stream(
+        stream=stream,
+        provider=ERP_A_CUSTOMER_PROVIDER,
+        input_source="test-stream",
+    )
+
+    assert run.status == ProcessingRunStatus.COMPLETED
+    assert run.input_source == "test-stream"
+    assert run.result is not None
+    assert len(run.result.processed) == 1

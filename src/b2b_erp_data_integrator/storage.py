@@ -22,3 +22,16 @@ def write_s3_object(
         Key=key,
         Body=content,
     )
+
+
+def stream_s3_object(
+    client,
+    bucket: str,
+    key: str,
+):
+    response = client.get_object(
+        Bucket=bucket,
+        Key=key,
+    )
+
+    return response["Body"]
