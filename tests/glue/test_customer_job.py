@@ -3,7 +3,6 @@ import pytest
 from b2b_erp_data_integrator.glue.customer_job import (
     CustomerJobArguments,
     get_customer_mapping,
-    parse_customer_job_arguments,
     run_customer_job,
 )
 from b2b_erp_data_integrator.integrations.erp_a.customer import (
@@ -35,38 +34,6 @@ def test_get_customer_mapping(
 def test_get_customer_mapping_rejects_unsupported_source():
     with pytest.raises(ValueError, match="Unsupported source system"):
         get_customer_mapping("ERP_X")
-
-
-def test_parse_customer_job_arguments():
-    result = parse_customer_job_arguments(
-        [
-            "--source-system",
-            "ERP_B",
-            "--input-path",
-            "s3://bucket/raw/customers.csv",
-            "--processed-path",
-            "s3://bucket/processed/customers/",
-            "--rejected-path",
-            "s3://bucket/rejected/customers/",
-        ]
-    )
-
-    assert result == CustomerJobArguments(
-        source_system="ERP_B",
-        input_path="s3://bucket/raw/customers.csv",
-        processed_path="s3://bucket/processed/customers/",
-        rejected_path="s3://bucket/rejected/customers/",
-    )
-
-
-def test_parse_customer_job_arguments_requires_all_arguments():
-    with pytest.raises(SystemExit):
-        parse_customer_job_arguments(
-            [
-                "--source-system",
-                "ERP_B",
-            ]
-        )
 
 
 def test_run_customer_job_uses_source_mapping(

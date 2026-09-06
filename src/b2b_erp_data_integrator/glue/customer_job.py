@@ -1,4 +1,3 @@
-import argparse
 from dataclasses import dataclass
 
 from pyspark.sql import SparkSession
@@ -37,26 +36,6 @@ def get_customer_mapping(
         return CUSTOMER_MAPPINGS[source_system]
     except KeyError:
         raise ValueError(f"Unsupported source system: {source_system}") from None
-
-
-def parse_customer_job_arguments(
-    argv: list[str],
-) -> CustomerJobArguments:
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("--source-system", required=True)
-    parser.add_argument("--input-path", required=True)
-    parser.add_argument("--processed-path", required=True)
-    parser.add_argument("--rejected-path", required=True)
-
-    args = parser.parse_args(argv)
-
-    return CustomerJobArguments(
-        source_system=args.source_system,
-        input_path=args.input_path,
-        processed_path=args.processed_path,
-        rejected_path=args.rejected_path,
-    )
 
 
 def run_customer_job(

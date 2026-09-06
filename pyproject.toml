@@ -31,3 +31,7 @@ python_version = "3.12"
 mypy_path = "src"
 explicit_package_bases = true
 files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = "awsglue.*"
+ignore_missing_imports = true
