@@ -1,5 +1,10 @@
+import os
+import sys
+from collections.abc import Iterator
+
 import boto3  # type: ignore[import-untyped]
 import pytest
+from pyspark.sql import SparkSession
 
 
 @pytest.fixture
@@ -28,3 +33,21 @@ def s3_bucket(s3_client):
         s3_client.create_bucket(Bucket=bucket)
 
     return bucket
+
+
+@pytest.fixture(scope="session")
+def spark_session() -> Iterator[SparkSession]:
+    os.environ["PYSPARK_PYTHON"] = sys.executable
+    os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
+
+    spark = (
+        SparkSession.builder.master("local[1]")  # type: ignore[attr-defined]
+        .appName("b2b-erp-data-integrator-tests")
+        .config("spark.driver.host", "127.0.0.1")
+        .config("spark.driver.bindAddress", "127.0.0.1")
+        .getOrCreate()
+    )
+
+    yield spark
+
+    spark.stop()
