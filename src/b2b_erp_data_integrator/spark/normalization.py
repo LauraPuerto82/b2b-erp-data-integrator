@@ -19,3 +19,17 @@ def normalize_country_column(column: Column) -> Column:
         )
 
     return result.otherwise(F.lit(None))
+
+
+def normalize_tax_id_column(
+    tax_id_column: Column,
+    country_column: Column,
+) -> Column:
+    normalized = F.upper(F.trim(tax_id_column))
+    normalized = F.regexp_replace(normalized, "-", "")
+    normalized = F.regexp_replace(normalized, " ", "")
+
+    return F.when(
+        F.substring(normalized, 1, 2) == country_column,
+        F.substring(normalized, 3, 2_147_483_647),
+    ).otherwise(normalized)
