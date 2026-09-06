@@ -20,6 +20,12 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Install dependencies
         run: uv sync --dev
 
