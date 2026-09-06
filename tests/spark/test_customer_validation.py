@@ -28,3 +28,8 @@ def test_split_valid_customers(spark_session):
 
     assert processed_ids == ["C001", "C003"]
     assert rejected_ids == ["C002"]
+
+    rejected_row = rejected.first()
+
+    assert rejected_row is not None
+    assert rejected_row.reason == "Invalid tax ID"
