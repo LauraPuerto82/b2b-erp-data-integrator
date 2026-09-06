@@ -6,3 +6,10 @@ def write_processed_parquet(
     path: str,
 ) -> None:
     dataframe.write.mode("overwrite").parquet(path)
+
+
+def write_rejected_json(
+    dataframe: DataFrame,
+    path: str,
+) -> None:
+    dataframe.write.mode("overwrite").json(path)
