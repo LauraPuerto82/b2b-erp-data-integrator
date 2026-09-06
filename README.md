@@ -4,9 +4,9 @@ Extensible B2B data integration platform for normalizing heterogeneous ERP data 
 
 ## Current scope
 
-The project currently implements a customer-integration pipeline for multiple heterogeneous ERP formats with both local-file and S3-backed execution paths.
+The project currently implements a customer-integration pipeline for multiple heterogeneous ERP formats with local-file, S3-backed, and Spark DataFrame processing paths.
 
-It focuses on the engineering problems that appear before cloud-scale execution: canonical modeling, provider-specific structural mappings, normalization, validation, dataset compatibility, partial-success batch processing, execution-level traceability, streaming ingestion, and object-storage integration.
+It focuses on canonical modeling, provider-specific structural mappings, normalization, validation, dataset compatibility, partial-success batch processing, execution-level traceability, streaming ingestion, object-storage integration, distributed Spark transformations, and preparation for AWS Glue execution.
 
 ## Current processing flow
 
@@ -59,6 +59,70 @@ Three example ERP providers are currently implemented. Each provider declares it
 
 For S3-backed execution, source CSV data is consumed directly from the S3 response stream instead of first materializing the complete object in memory or copying it to a temporary input file.
 
+## Spark processing path
+
+A second processing path has been introduced with PySpark to prepare the integration pipeline for distributed execution in AWS Glue.
+
+```text
+CSV / S3-compatible input
+        ↓
+Spark DataFrame
+        ↓
+provider field mapping
+        ↓
+canonical column normalization
+        ↓
+business validation
+        ↓
+processed / rejected DataFrames
+        ↓
+canonical identity
+        ↓
+deduplicate by customer_id
+        ↓
+processed → Parquet
+rejected  → JSON
+```
+
+The Spark path reuses the existing ERP A, ERP B, and ERP C structural mappings rather than embedding source-system conditionals into the Spark processing core.
+
+Most transformations are expressed using native Spark DataFrame operations. Canonical UUID5 identity generation is intentionally implemented as a localized Python UDF so that the same normalized customer identity produces the same `customer_id` in both the Python and Spark processing paths.
+
+## AWS Glue integration
+
+The project now includes a thin AWS Glue runtime adapter around the Spark processing core.
+
+```text
+AWS Glue runtime
+        ↓
+getResolvedOptions
+        ↓
+GlueContext / SparkSession
+        ↓
+CustomerJobArguments
+        ↓
+source-system mapping selection
+        ↓
+Spark customer pipeline
+        ↓
+Job.commit()
+```
+
+The Glue-specific entry point is intentionally separated from reusable Spark transformation logic.
+
+The current job arguments are:
+
+```text
+source_system
+input_path
+processed_path
+rejected_path
+```
+
+`source_system` selects the mapping for ERP A, ERP B, or ERP C, while input and output paths remain execution-time configuration.
+
+The Glue integration code is implemented and packaged, but the Glue job has not yet been deployed and executed end to end in MiniStack.
+
 ## Processing semantics
 
 Record-level and dataset-level failures are intentionally different:
@@ -71,9 +135,11 @@ A `COMPLETED` processing run may therefore contain both processed and rejected r
 
 ## Technology
 
-- Python 3.12
+- Python 3.11+ (local development also uses Python 3.12)
 - Pydantic
 - PyArrow / Parquet
+- PySpark 3.5
+- AWS Glue runtime integration
 - Boto3
 - Amazon S3-compatible APIs
 - MiniStack
@@ -82,6 +148,19 @@ A `COMPLETED` processing run may therefore contain both processed and rejected r
 - MyPy
 - pre-commit
 - GitHub Actions
+- uv
+
+## Packaging and Glue runtime compatibility
+
+The project can be packaged as a Python wheel with:
+
+```bash
+uv build
+```
+
+The wheel contains project-owned Python code. PySpark and `awsglue` are treated as runtime-provided dependencies for AWS Glue rather than bundled into the application artifact.
+
+Because the target Glue runtime uses Python 3.11, compatibility has been checked separately from the main Python 3.12 development environment: the source tree compiles under Python 3.11, the test suite has been executed under Python 3.11, and the generated wheel installs successfully in a clean Python 3.11 environment.
 
 ## Quality checks
 
@@ -112,10 +191,14 @@ For S3-backed execution, generated Parquet and JSONL files are uploaded through 
 
 S3 integration is developed and tested locally using MiniStack and is also exercised in GitHub Actions.
 
+MiniStack has also been verified to expose the Glue `GetJobs` API required for the next deployment stage. This confirms that the local Glue control-plane boundary is available, but it does not yet demonstrate that this project's Glue job can be created, executed, and verified end to end.
+
 The current implementation has not been deployed to or validated against a real AWS account.
 
 ## Next stages
 
-The customer-integration pipeline is now connected end to end for both local files and S3-backed execution.
+The customer-integration pipeline is now implemented for local-file, S3-backed, and Spark processing paths, and the AWS Glue runtime adapter is in place.
 
-AWS Glue is the next planned cloud data-platform component. Real AWS deployment remains deliberately deferred while the architecture can be developed and validated against local AWS-compatible infrastructure.
+The next stage is deployment: package the project artifact, create and execute the Glue job in MiniStack, verify processed and rejected outputs end to end, and provide reproducible deployment scripts for both Windows and Linux.
+
+Real AWS deployment remains deliberately deferred until the AWS-compatible local deployment flow has been completed and validated.

@@ -818,6 +818,412 @@ MiniStack allows the S3 integration boundary to be exercised locally and in GitH
 
 Real AWS deployment remains a separate future concern.
 
+------------------------------------------------------------------------
+
+## ADR-011 --- Introduce a Spark DataFrame processing path without replacing the stream-oriented Python pipeline
+
+**Status:** Accepted
+**Stage:** Distributed processing and AWS Glue preparation
+
+### Context
+
+The existing Python pipeline already provides validated semantics for local files and S3-backed execution: provider mapping, normalization, validation, canonical identity, deduplication, processed Parquet output, and rejected-record output.
+
+The next concrete requirement is to prepare the project for AWS Glue, whose managed ETL execution model is built around Apache Spark.
+
+Replacing the existing Python pipeline with Spark would couple previously validated stream-oriented behavior to a distributed execution engine. At the same time, wrapping the existing row-by-row Python pipeline unchanged inside Glue would not make meaningful use of Spark's DataFrame execution model.
+
+### Decision
+
+Introduce a separate Spark DataFrame processing path.
+
+The Spark path preserves the same canonical intent while expressing transformations using DataFrame operations:
+
+```text
+source dataset
+      ↓
+Spark DataFrame
+      ↓
+provider structural mapping
+      ↓
+normalization
+      ↓
+validation
+      ↓
+processed / rejected DataFrames
+      ↓
+canonical identity
+      ↓
+deduplication
+      ↓
+Parquet / JSON outputs
+```
+
+The existing Python stream-oriented pipeline remains valid for its local-file and S3-backed use cases.
+
+### Trade-off
+
+The repository now contains two processing implementations, so canonical semantics must remain intentionally aligned between them.
+
+This duplication is accepted because the execution models solve different problems. The Python path is explicit and stream-oriented, while the Spark path delegates distributed transformation planning and execution to Spark.
+
+### Alternatives considered
+
+- Replace the existing Python pipeline entirely with Spark.
+- Run the existing row-by-row Python processing unchanged inside Glue.
+- Introduce Spark and Glue simultaneously during deployment.
+- Build a generic execution-engine abstraction before both implementations existed.
+
+### Consequences
+
+Spark-specific behavior can be tested independently.
+
+The project can demonstrate both stream-oriented processing and distributed DataFrame processing.
+
+The Spark path becomes the processing core used by the AWS Glue adapter.
+
+------------------------------------------------------------------------
+
+## ADR-012 --- Prefer native Spark DataFrame expressions and use a localized Python UDF for UUID5 identity
+
+**Status:** Accepted
+**Stage:** Spark transformation design
+
+### Context
+
+Spark transformations can be expressed using native DataFrame operations or Python UDFs.
+
+Native expressions remain visible to Spark's planner and are generally preferable for mapping, normalization, validation, filtering, and deduplication.
+
+Canonical customer identity already has an established contract: normalized `country + tax_id` is converted to UUID5 using a fixed namespace.
+
+Changing the algorithm only to avoid a Python UDF would cause the same customer to receive different identifiers depending on the processing engine.
+
+### Decision
+
+Use native Spark DataFrame expressions for structural mapping, normalization, validation, filtering, and deduplication.
+
+Use a localized Python UDF only for UUID5 identity generation so that the Spark and Python pipelines preserve the same canonical `customer_id` contract.
+
+### Trade-off
+
+The UUID5 UDF introduces a JVM/Python execution boundary and may be less efficient than a fully native Spark expression.
+
+That cost is accepted because identity consistency across processing engines is more important than replacing the established contract with a different hash.
+
+### Alternatives considered
+
+- Implement all Spark transformations as Python UDFs.
+- Replace UUID5 with a Spark-native hash.
+- Generate identity only after collecting Spark rows into Python.
+- Maintain different identity schemes for Python and Spark.
+
+### Consequences
+
+Most transformations remain Spark-native and optimizable.
+
+Canonical identity remains consistent between Python and Spark.
+
+If identity generation becomes a measured performance bottleneck, its implementation can be revisited without silently changing the canonical identity contract.
+
+------------------------------------------------------------------------
+
+## ADR-013 --- Keep AWS Glue runtime concerns outside the reusable Spark processing core
+
+**Status:** Accepted
+**Stage:** AWS Glue integration
+
+### Context
+
+AWS Glue introduces runtime-specific concepts including `getResolvedOptions`, `SparkContext`, `GlueContext`, Glue `Job`, `Job.init`, and `Job.commit`.
+
+Embedding these concerns directly inside Spark transformation functions would make the processing core dependent on AWS Glue and harder to test locally.
+
+The `awsglue` package is also supplied by the target Glue runtime rather than being a normal local dependency.
+
+### Decision
+
+Keep the Glue entry point thin and separate runtime adaptation from reusable Spark processing.
+
+```text
+glue/main.py
+      ↓
+Glue runtime setup
+      ↓
+glue/runtime.py
+      ↓
+CustomerJobArguments
+      ↓
+glue/customer_job.py
+      ↓
+source mapping selection
+      ↓
+spark/run.py
+      ↓
+Spark processing core
+```
+
+`main.py` owns Glue runtime initialization and lifecycle.
+
+`runtime.py` converts resolved Glue options into the project's job-argument model.
+
+`customer_job.py` selects the source mapping and delegates to the Spark pipeline.
+
+### Trade-off
+
+The Glue integration contains several small modules instead of one self-contained script.
+
+This adds some structure, but each module has a narrow responsibility and the Spark processing core remains independently testable.
+
+### Alternatives considered
+
+- Put Glue initialization, mapping selection, transformations, and output logic in one script.
+- Make Spark modules import `awsglue` directly.
+- Install the Glue runtime locally as a normal project dependency.
+- Mock the entire Glue runtime throughout the Spark test suite.
+
+### Consequences
+
+Spark transformation tests do not require AWS Glue.
+
+Glue-specific imports remain isolated.
+
+The Glue entry point remains close to the target runtime while reusable processing code remains platform-independent.
+
+------------------------------------------------------------------------
+
+## ADR-014 --- Treat Spark and AWS Glue libraries as runtime-provided deployment dependencies
+
+**Status:** Accepted
+**Stage:** Packaging and runtime compatibility
+
+### Context
+
+The project is packaged as a Python wheel for deployment.
+
+A clean wheel installation demonstrated that Spark-dependent modules cannot be imported in a bare Python environment without PySpark.
+
+That does not mean PySpark should be bundled into the application wheel. AWS Glue supplies Spark/PySpark and `awsglue` as part of its managed runtime.
+
+### Decision
+
+Keep the project wheel focused on project-owned Python code.
+
+PySpark remains a development and test dependency, while Spark/PySpark and `awsglue` are treated as runtime-provided dependencies in AWS Glue.
+
+Static analysis explicitly tolerates missing local `awsglue.*` implementations because those modules intentionally exist only in the target runtime.
+
+### Trade-off
+
+A completely bare Python environment cannot execute Spark-dependent project modules unless PySpark is installed separately.
+
+Likewise, the Glue entry point cannot run as an ordinary local script without a Glue-compatible runtime.
+
+These limitations are accepted because they reflect the target platform boundary rather than missing application dependencies.
+
+### Alternatives considered
+
+- Add PySpark as a normal production dependency of the wheel.
+- Vendor AWS Glue libraries into the project.
+- Disable static analysis for the complete Glue module.
+- Avoid packaging the Spark/Glue integration with the project.
+
+### Consequences
+
+The project artifact reflects dependency ownership more accurately.
+
+Development and CI environments install PySpark explicitly.
+
+The target Glue runtime is responsible for providing Spark and Glue libraries.
+
+------------------------------------------------------------------------
+
+## ADR-015 --- Support Python 3.11 for the AWS Glue target runtime
+
+**Status:** Accepted
+**Stage:** AWS Glue runtime compatibility
+
+### Context
+
+Local development had primarily used Python 3.12, while the selected Glue target runtime uses Python 3.11.
+
+A successful Python 3.12 test run does not prove that source syntax, dependencies, packaging metadata, or behavior are compatible with Python 3.11.
+
+### Decision
+
+Lower the project's supported Python floor to 3.11 and verify the target runtime explicitly.
+
+Compatibility was checked by compiling the source and tests under Python 3.11, executing the test suite with Python 3.11, rebuilding the wheel, and installing that wheel in a clean Python 3.11 environment.
+
+### Trade-off
+
+Supporting Python 3.11 adds another compatibility dimension and prevents adopting Python-only features that require a newer minimum version without reconsidering the Glue target.
+
+### Alternatives considered
+
+- Assume Python 3.12 compatibility implies Python 3.11 compatibility.
+- Discover version incompatibilities only during Glue deployment.
+- Change the Glue target solely to match the development interpreter.
+- Maintain a separate Glue-specific source tree.
+
+### Consequences
+
+The project declares `requires-python = ">=3.11"`.
+
+Python 3.11 compatibility is supported by executable evidence rather than assumption.
+
+Local development may still use Python 3.12.
+
+------------------------------------------------------------------------
+
+## ADR-016 --- Validate Spark filesystem output in Linux CI when local Windows Hadoop support is insufficient
+
+**Status:** Accepted for development
+**Stage:** Spark test execution
+
+### Context
+
+Spark transformations run locally on Windows, but some local filesystem write operations depend on Hadoop-native behavior that may require Windows-specific utilities such as `winutils`.
+
+Adding arbitrary native binaries only to make local output tests pass would introduce environment and security complexity unrelated to the Linux-based Glue target.
+
+### Decision
+
+Keep Spark transformation and non-problematic tests runnable locally.
+
+Tests that specifically depend on unsupported Windows Hadoop filesystem behavior are skipped on Windows and executed normally in Linux CI.
+
+Do not weaken production output behavior or introduce unofficial Windows-native binaries merely to eliminate the local skips.
+
+### Trade-off
+
+The local Windows test run contains intentional skips and therefore does not exercise every Spark filesystem output path.
+
+Those behaviors must remain covered by Linux CI.
+
+### Alternatives considered
+
+- Install an unofficial `winutils` binary.
+- Remove Spark filesystem output tests.
+- Mock all Spark writes.
+- Change output behavior solely to accommodate Windows.
+- Require local Linux development.
+
+### Consequences
+
+Local development remains simpler and safer.
+
+Linux CI becomes part of the Spark validation strategy rather than only a duplicate of local execution.
+
+------------------------------------------------------------------------
+
+## ADR-017 --- Keep Glue job inputs explicit and supplied at execution time
+
+**Status:** Accepted
+**Stage:** Glue job orchestration
+
+### Context
+
+The Glue job must know which ERP mapping to use and where to read and write data.
+
+Hard-coding those values would mix stable job implementation with one particular execution and could require separate scripts or job definitions for different ERP sources.
+
+### Decision
+
+Represent the current job execution contract using:
+
+```text
+source_system
+input_path
+processed_path
+rejected_path
+```
+
+`source_system` selects one of the supported mappings for ERP A, ERP B, or ERP C.
+
+Input and output paths are execution-time configuration.
+
+### Trade-off
+
+The mapping registry is still code-based, so adding an ERP requires a code change and deployment.
+
+The argument contract is intentionally small and does not yet attempt to model arbitrary transformation configuration, schema versions, retries, or operational tuning.
+
+### Alternatives considered
+
+- Hard-code paths and source system in the Glue entry point.
+- Create one Glue implementation per ERP.
+- Store mappings and all runtime configuration in a database immediately.
+- Build a generic dynamic configuration platform before a concrete requirement exists.
+
+### Consequences
+
+One Glue job implementation can execute against multiple supported ERP layouts.
+
+Stable infrastructure concerns remain separate from run-specific data locations.
+
+External mapping persistence remains deliberately deferred until requirements such as independent updates, versioning, activation, or larger-scale mapping management emerge.
+
+------------------------------------------------------------------------
+
+## ADR-018 --- Defer commitment to a Glue infrastructure definition until MiniStack deployment is validated end to end
+
+**Status:** Accepted for current stage
+**Stage:** Glue deployment preparation
+
+### Context
+
+The Glue application boundary, target-runtime compatibility, and packaging strategy are implemented, but the deployment mechanism has not yet been validated end to end.
+
+CloudFormation was explored as one possible infrastructure mechanism, but the draft template has not been used to create and execute the project job.
+
+MiniStack has now been verified to expose the Glue `GetJobs` API, providing a concrete local control-plane boundary for the next deployment stage.
+
+Committing an unvalidated infrastructure template would present an experiment as a supported deployment capability.
+
+### Decision
+
+Do not treat the current CloudFormation draft as completed project infrastructure.
+
+First exercise the local Glue deployment flow end to end:
+
+```text
+build project artifact
+      ↓
+make script and artifact available
+      ↓
+create or update Glue job
+      ↓
+start Glue job run
+      ↓
+execute Spark pipeline
+      ↓
+write processed / rejected outputs
+      ↓
+verify results
+```
+
+Once the working command sequence is known, provide reproducible deployment scripts for both Windows and Linux and decide which infrastructure definition belongs in the repository.
+
+### Trade-off
+
+The repository does not yet contain a committed, reproducible Glue deployment definition.
+
+That is accepted temporarily because it is more accurate than presenting an unproven draft as finished infrastructure.
+
+### Alternatives considered
+
+- Commit the current CloudFormation draft immediately.
+- Require a real AWS account before continuing.
+- Treat a successful `GetJobs` call as equivalent to a successful job deployment.
+- Provide only Windows deployment automation.
+
+### Consequences
+
+The current documentation can distinguish clearly between implemented Glue integration code and pending Glue deployment.
+
+The next stage has an observable acceptance criterion: a reproducible MiniStack Glue job run that produces verifiable outputs on both supported scripting paths.
+
 # Known Technical Debt
 
 ## TD-001 --- Persistent idempotency across processing executions
