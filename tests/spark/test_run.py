@@ -20,7 +20,8 @@ def test_run_customer_pipeline(tmp_path, spark_session):
     input_path.write_text(
         "client_code,legal_name,vat_number,country,contact_email\n"
         "C001,ACME S.L., es-b12 345-678 ,Spain,info@acme.es\n"
-        "C002,Globex S.L., es-b1234 ,Spain,info@globex.es\n",
+        "C002,ACME Sociedad Limitada,ESB12345678,Spain,contact@acme.es\n"
+        "C003,Globex S.L., es-b1234 ,Spain,info@globex.es\n",
         encoding="utf-8",
     )
 
@@ -35,17 +36,20 @@ def test_run_customer_pipeline(tmp_path, spark_session):
     processed = spark_session.read.parquet(str(processed_path))
     rejected = spark_session.read.json(str(rejected_path))
 
-    processed_row = processed.first()
-    rejected_row = rejected.first()
+    processed_rows = processed.collect()
+    rejected_rows = rejected.collect()
 
-    assert processed_row is not None
-    assert rejected_row is not None
+    assert len(processed_rows) == 1
+    assert len(rejected_rows) == 1
 
-    assert processed_row.external_id == "C001"
+    processed_row = processed_rows[0]
+    rejected_row = rejected_rows[0]
+
+    assert processed_row.customer_id is not None
     assert processed_row.tax_id == "B12345678"
     assert processed_row.country == "ES"
 
-    assert rejected_row.external_id == "C002"
+    assert rejected_row.external_id == "C003"
     assert rejected_row.tax_id == "B1234"
     assert rejected_row.country == "ES"
     assert rejected_row.reason == "Invalid tax ID"

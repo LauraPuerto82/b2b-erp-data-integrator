@@ -3,6 +3,10 @@ from pyspark.sql import SparkSession
 from b2b_erp_data_integrator.spark.customer_csv_pipeline import (
     process_customer_csv_dataframe,
 )
+from b2b_erp_data_integrator.spark.identity import (
+    deduplicate_customers,
+    identify_customers,
+)
 from b2b_erp_data_integrator.spark.output import (
     write_processed_parquet,
     write_rejected_json,
@@ -22,8 +26,11 @@ def run_customer_pipeline(
         field_mapping=field_mapping,
     )
 
+    identified = identify_customers(processed)
+    unique_processed = deduplicate_customers(identified)
+
     write_processed_parquet(
-        dataframe=processed,
+        dataframe=unique_processed,
         path=processed_path,
     )
     write_rejected_json(
