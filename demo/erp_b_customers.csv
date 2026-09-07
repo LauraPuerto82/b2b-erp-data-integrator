@@ -1,0 +1,3 @@
+client_code,legal_name,vat_number,country,contact_email
+C001,ACME S.L., es-b12 345-678 ,Spain,info@acme.es
+C002,Globex S.L., es-b1234 ,Spain,info@globex.es

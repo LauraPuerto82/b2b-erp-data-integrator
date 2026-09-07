@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  AWS Glue infrastructure for the B2B ERP Data Integrator.
+
+Parameters:
+  ArtifactBucketName:
+    Type: String
+    Description: S3 bucket containing Glue scripts, application artifacts, and pipeline data.
+
+  GlueScriptKey:
+    Type: String
+    Description: S3 key of the AWS Glue entry point script.
+
+  GlueWheelKey:
+    Type: String
+    Description: S3 key of the application wheel.
+
+Resources:
+  GlueJobRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      Policies:
+        - PolicyName: GlueS3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${ArtifactBucketName}"
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${ArtifactBucketName}/*"
+  CustomerGlueJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: b2b-erp-data-integrator-customers
+      Role: !GetAtt GlueJobRole.Arn
+
+      GlueVersion: "5.1"
+
+      Command:
+        Name: glueetl
+        PythonVersion: "3"
+        ScriptLocation: !Sub "s3://${ArtifactBucketName}/${GlueScriptKey}"
+
+      DefaultArguments:
+        "--job-language": "python"
+        "--additional-python-modules": !Sub "s3://${ArtifactBucketName}/${GlueWheelKey}"
+
+      WorkerType: G.1X
+      NumberOfWorkers: 2
