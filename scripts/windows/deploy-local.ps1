@@ -1,3 +1,5 @@
+#requires -Version 7.0
+
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = (Resolve-Path "$PSScriptRoot\..\..").Path
