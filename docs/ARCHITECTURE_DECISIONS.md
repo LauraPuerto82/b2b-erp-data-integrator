@@ -1168,7 +1168,7 @@ External mapping persistence remains deliberately deferred until requirements su
 
 ## ADR-018 --- Defer commitment to a Glue infrastructure definition until MiniStack deployment is validated end to end
 
-**Status:** Accepted for current stage
+**Status:** Superseded by ADR-019
 **Stage:** Glue deployment preparation
 
 ### Context
@@ -1223,6 +1223,158 @@ That is accepted temporarily because it is more accurate than presenting an unpr
 The current documentation can distinguish clearly between implemented Glue integration code and pending Glue deployment.
 
 The next stage has an observable acceptance criterion: a reproducible MiniStack Glue job run that produces verifiable outputs on both supported scripting paths.
+
+## ADR-019 --- Adopt reproducible AWS Glue infrastructure and local deployment after end-to-end validation
+
+**Status:** Accepted
+**Stage:** AWS Glue local deployment
+
+### Context
+
+ADR-018 deliberately deferred commitment to a Glue infrastructure definition until the deployment mechanism had been exercised end to end.
+
+That acceptance criterion has now been met.
+
+The project has been deployed locally using MiniStack and the AWS Glue 5 Docker runtime. The validated flow builds the project wheel, provisions the required AWS-compatible resources, uploads the Glue script and application artifact to S3, creates the Glue job, executes it, and verifies the generated outputs.
+
+The complete validated path is:
+
+```text
+ERP CSV input
+      ↓
+S3
+      ↓
+Glue job
+      ↓
+AWS Glue 5 / Spark
+      ↓
+project application wheel
+      ↓
+Spark customer processing
+      ↓
+┌─────────────────────┐
+│ processed           │
+│ → Parquet           │
+│                     │
+│ rejected            │
+│ → JSON              │
+└─────────────────────┘
+      ↓
+S3
+```
+
+The end-to-end test validates not only that output objects exist but also that their contents represent the expected processed and rejected customers.
+
+During deployment validation, a limitation of the local AWS-compatible environment was also observed: the required Glue job could not be provisioned through the CloudFormation path used by the infrastructure template alone.
+
+The local deployment therefore needs to distinguish between the intended AWS infrastructure definition and the concrete mechanism required to reproduce that infrastructure in MiniStack.
+
+### Decision
+
+Commit the validated AWS Glue infrastructure definition under:
+
+```text
+infrastructure/aws/glue.yaml
+```
+
+Treat this definition as the project's AWS infrastructure contract for the current Glue workload.
+
+For local development, use reproducible deployment scripts that create the equivalent supported resources through MiniStack's AWS-compatible APIs where the CloudFormation path is not supported by the local environment.
+
+Provide equivalent lifecycle automation for both supported development environments:
+
+```text
+scripts/
+├── windows/
+│   ├── deploy-local.ps1
+│   ├── test-e2e.ps1
+│   ├── stop-local.ps1
+│   └── clean-local.ps1
+│
+└── linux/
+    ├── deploy-local.sh
+    ├── test-e2e.sh
+    ├── stop-local.sh
+    └── clean-local.sh
+```
+
+The supported local lifecycle is:
+
+```text
+deploy-local
+      ↓
+provision local AWS-compatible resources
+      ↓
+build and upload application artifacts
+      ↓
+create Glue job
+      ↓
+test-e2e
+      ↓
+upload input → execute Glue → verify outputs
+      ↓
+┌─────────────────────────────┐
+│ stop-local                  │
+│ → stop local environment    │
+│                             │
+│ clean-local                 │
+│ → remove local environment  │
+│   and generated artifacts   │
+└─────────────────────────────┘
+```
+
+Windows lifecycle scripts require PowerShell 7 or later so that script behavior and generated UTF-8 deployment files are consistent with the validated environment.
+
+Linux scripts are executable repository artifacts and are validated through the Linux/WSL path.
+
+The local deployment is treated as an AWS-compatible development and validation environment. It is not treated as evidence that the infrastructure has been deployed to or operationally validated in a real AWS account.
+
+### Trade-off
+
+The repository now contains both an AWS infrastructure definition and imperative local deployment scripts.
+
+This creates some duplication between the declarative AWS representation and the commands required to reproduce the environment in MiniStack.
+
+That duplication is accepted because MiniStack does not reproduce every CloudFormation provisioning path required by the current Glue workload, while its AWS-compatible service APIs are sufficient to exercise the actual Glue execution boundary locally.
+
+The deployment scripts also contain platform-specific shell implementations for Windows and Linux. Maintaining two scripting paths adds maintenance cost, but makes the local deployment reproducible in both supported development environments instead of documenting commands that have only been verified on one platform.
+
+MiniStack validates the application packaging, S3 interaction, IAM/Glue control-plane calls supported by the emulator, Glue job execution, Spark processing, and output verification.
+
+It does not validate real AWS IAM enforcement, networking, account configuration, quotas, service limits, observability, cost behavior, or other production operational concerns.
+
+### Alternatives considered
+
+- Continue treating the infrastructure definition as experimental after the local deployment had been validated.
+- Require a real AWS account before committing any Glue infrastructure.
+- Treat the CloudFormation template as the only permitted deployment mechanism even where the local environment does not support the required Glue resource path.
+- Remove the infrastructure definition and rely entirely on imperative deployment scripts.
+- Provide deployment automation for Windows only.
+- Provide deployment automation for Linux only.
+- Validate only that the Glue job reaches a successful state without verifying its generated data.
+- Treat successful MiniStack execution as equivalent to real AWS deployment validation.
+
+### Consequences
+
+The repository now contains a concrete, documented AWS Glue infrastructure definition rather than an unvalidated deployment draft.
+
+The complete Glue workload can be reproduced locally from scripts on both Windows and Linux/WSL.
+
+The end-to-end validation exercises the real deployment boundary:
+
+```text
+S3 → Glue/Spark → application package → processing → S3
+```
+
+and verifies the contents of processed and rejected outputs.
+
+Local lifecycle behavior is explicit: the environment can be deployed, tested, stopped without deletion, or cleaned together with generated deployment artifacts.
+
+ADR-018 remains as the historical record of why infrastructure commitment was deferred until executable evidence existed. This ADR records the decision made after that evidence became available.
+
+Real AWS deployment remains deliberately separate. Before claiming production AWS support, the infrastructure must still be deployed and validated against an actual AWS account.
+
+------------------------------------------------------------------------
 
 # Known Technical Debt
 

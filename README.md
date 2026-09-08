@@ -121,7 +121,22 @@ rejected_path
 
 `source_system` selects the mapping for ERP A, ERP B, or ERP C, while input and output paths remain execution-time configuration.
 
-The Glue integration code is implemented and packaged, but the Glue job has not yet been deployed and executed end to end in MiniStack.
+The Glue integration is packaged and deployed locally through MiniStack. The Glue job has been executed and validated end to end, including S3 input upload, Glue/Spark execution, processed Parquet output, rejected JSON output, and content-level assertions.
+
+## Deployment
+
+The AWS Glue pipeline can be deployed and executed locally using MiniStack, providing an AWS-compatible environment without requiring a real AWS account.
+
+The repository includes reproducible deployment and lifecycle scripts for both Windows and Linux/WSL:
+
+- deploy the local AWS environment and Glue job;
+- execute the end-to-end pipeline;
+- stop the local environment;
+- clean deployed resources and generated artifacts.
+
+The E2E flow has been validated from S3 input through Glue/Spark execution to processed Parquet and rejected JSON outputs.
+
+For architecture details, prerequisites, infrastructure resources, and execution commands, see [`infrastructure/README.md`](infrastructure/README.md).
 
 ## Processing semantics
 
@@ -191,14 +206,18 @@ For S3-backed execution, generated Parquet and JSONL files are uploaded through 
 
 S3 integration is developed and tested locally using MiniStack and is also exercised in GitHub Actions.
 
-MiniStack has also been verified to expose the Glue `GetJobs` API required for the next deployment stage. This confirms that the local Glue control-plane boundary is available, but it does not yet demonstrate that this project's Glue job can be created, executed, and verified end to end.
+The AWS-compatible local deployment now provisions the S3 bucket, uploads the Glue script and application wheel, creates the Glue IAM role and Glue job, and executes the customer pipeline end to end.
+
+Reproducible lifecycle scripts are provided for both Windows and Linux/WSL to deploy, validate, stop, and clean the local environment. The end-to-end test uploads an ERP B dataset, runs the Glue job, waits for completion, verifies processed Parquet and rejected JSON outputs, and validates their contents.
+
+Detailed infrastructure and local deployment documentation is available in `infrastructure/README.md`.
 
 The current implementation has not been deployed to or validated against a real AWS account.
 
 ## Next stages
 
-The customer-integration pipeline is now implemented for local-file, S3-backed, and Spark processing paths, and the AWS Glue runtime adapter is in place.
+The customer-integration pipeline is now implemented for local-file, S3-backed, and Spark processing paths, and the AWS Glue runtime adapter has been deployed and validated end to end in MiniStack.
 
-The next stage is deployment: package the project artifact, create and execute the Glue job in MiniStack, verify processed and rejected outputs end to end, and provide reproducible deployment scripts for both Windows and Linux.
+The AWS-compatible local deployment flow is complete, with reproducible deployment, end-to-end validation, stop, and cleanup scripts for both Windows and Linux/WSL.
 
-Real AWS deployment remains deliberately deferred until the AWS-compatible local deployment flow has been completed and validated.
+Real AWS deployment remains deliberately deferred. A future stage can validate the same infrastructure and Glue workload against a real AWS account.
